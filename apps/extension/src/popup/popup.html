@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Always On Subtitles</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Always On Subtitles</h1>
+        <p id="status" class="status">Checking connection…</p>
+      </header>
+
+      <label class="toggle">
+        <input id="enabled" type="checkbox" />
+        <span>Send captions to desktop app</span>
+      </label>
+
+      <section class="help">
+        <p id="help-text">Make sure the desktop app is running.</p>
+        <button id="reconnect" type="button">Reconnect</button>
+      </section>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

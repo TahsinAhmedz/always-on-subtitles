@@ -1,0 +1,22 @@
+{
+  "name": "always-on-subtitles",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Floating always-on-top YouTube subtitles companion",
+  "workspaces": [
+    "apps/desktop",
+    "apps/extension"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/desktop",
+    "dev:extension": "npm run build --workspace=apps/extension -- --watch",
+    "build": "npm run build --workspaces --if-present",
+    "build:desktop": "npm run build --workspace=apps/desktop",
+    "build:extension": "npm run build --workspace=apps/extension",
+    "package:desktop": "npm run tauri build --workspace=apps/desktop",
+    "package:extension": "npm run package --workspace=apps/extension"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
