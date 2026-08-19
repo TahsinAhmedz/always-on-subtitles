@@ -1,5 +1,5 @@
 import type { SubtitleEvent } from './types';
-import { loadSettings } from './storage';
+import { getSettings } from './content-settings';
 
 type ConnectionState = 'connected' | 'disconnected' | 'connecting';
 
@@ -12,7 +12,7 @@ export function getConnectionState(): ConnectionState {
 }
 
 export async function sendEvent(event: SubtitleEvent): Promise<boolean> {
-  const settings = await loadSettings();
+  const settings = getSettings();
   if (!settings.enabled) {
     return false;
   }
@@ -30,7 +30,7 @@ export async function sendEvent(event: SubtitleEvent): Promise<boolean> {
 }
 
 export async function connect(): Promise<void> {
-  const settings = await loadSettings();
+  const settings = getSettings();
   const url = `ws://127.0.0.1:${settings.serverPort}`;
 
   if (socket?.readyState === WebSocket.OPEN) {

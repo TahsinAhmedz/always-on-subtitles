@@ -1,4 +1,5 @@
 import { sendEvent } from './websocket';
+import { refreshSettingsFromBackground } from './content-settings';
 import type { SubtitleEvent } from './types';
 
 const POLL_INTERVAL_MS = 100;
@@ -204,11 +205,14 @@ function observeNavigation(): void {
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'settings_changed') {
     lastCueText = '';
+    void refreshSettingsFromBackground();
   }
 });
 
-start();
-observeNavigation();
+void refreshSettingsFromBackground().then(() => {
+  start();
+  observeNavigation();
+});
 
 window.addEventListener('beforeunload', () => {
   stop();

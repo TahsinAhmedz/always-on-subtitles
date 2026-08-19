@@ -5,6 +5,13 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'get_settings') {
+    void loadSettings().then((settings) => {
+      sendResponse(settings);
+    });
+    return true;
+  }
+
   if (message?.type === 'get_status') {
     void loadSettings().then((settings) => {
       sendResponse({ enabled: settings.enabled, serverPort: settings.serverPort });
