@@ -7,6 +7,7 @@ const YOUTUBE_WATCH_PATH = '/watch';
 let currentVideoId: string | null = null;
 let lastCueText = '';
 let wasPlaying = false;
+let hasStartedForCurrentVideo = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function getVideoId(): string | null {
@@ -85,6 +86,10 @@ async function handleVideoChange(videoId: string): Promise<void> {
   currentVideoId = videoId;
   lastCueText = '';
   wasPlaying = false;
+  hasStartedForCurrentVideo = false;
+}
+
+async function emitVideoStarted(videoId: string): Promise<void> {
   await emit({
     type: 'video_started',
     videoId,
@@ -97,6 +102,7 @@ async function poll(): Promise<void> {
     if (currentVideoId) {
       currentVideoId = null;
       lastCueText = '';
+      hasStartedForCurrentVideo = false;
       wasPlaying = false;
       await emit({ type: 'video_ended' });
     }
@@ -119,7 +125,12 @@ async function poll(): Promise<void> {
 
   const isPlaying = !video.paused && !video.ended;
   if (isPlaying && !wasPlaying) {
-    await emit({ type: 'resumed' });
+    if (!hasStartedForCurrentVideo && currentVideoId) {
+      hasStartedForCurrentVideo = true;
+      await emitVideoStarted(currentVideoId);
+    } else {
+      await emit({ type: 'resumed' });
+    }
   } else if (!isPlaying && wasPlaying) {
     await emit({ type: 'paused' });
   }
@@ -129,6 +140,7 @@ async function poll(): Promise<void> {
     if (currentVideoId) {
       currentVideoId = null;
       lastCueText = '';
+      hasStartedForCurrentVideo = false;
       await emit({ type: 'video_ended' });
     }
     return;
@@ -182,6 +194,7 @@ function observeNavigation(): void {
       lastUrl = location.href;
       currentVideoId = null;
       lastCueText = '';
+      hasStartedForCurrentVideo = false;
       wasPlaying = false;
     }
   });

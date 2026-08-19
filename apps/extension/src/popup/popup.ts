@@ -1,9 +1,6 @@
 import { loadSettings, updateSettings } from '../storage';
 import { connect, disconnect, getConnectionState } from '../websocket';
 
-const DESKTOP_DOWNLOAD_URL =
-  'https://github.com/always-on-subtitles/always-on-subtitles#desktop-app';
-
 const enabledInput = document.getElementById('enabled') as HTMLInputElement;
 const statusEl = document.getElementById('status') as HTMLParagraphElement;
 const helpText = document.getElementById('help-text') as HTMLParagraphElement;
@@ -22,10 +19,10 @@ async function refreshUi(): Promise<void> {
       : 'Desktop app not connected';
   statusEl.className = `status ${state === 'connected' ? 'connected' : 'disconnected'}`;
 
-  helpText.innerHTML =
+  helpText.textContent =
     state === 'connected'
       ? 'Open any YouTube video to see floating captions.'
-      : `Start the desktop app, then click Reconnect. <a href="${DESKTOP_DOWNLOAD_URL}" target="_blank" rel="noreferrer">Download desktop app</a>`;
+      : 'Start the Always On Subtitles desktop app, then click Reconnect.';
 }
 
 enabledInput.addEventListener('change', async () => {
