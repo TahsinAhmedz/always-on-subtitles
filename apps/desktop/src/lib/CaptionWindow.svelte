@@ -4,12 +4,51 @@
   import { loadSettings } from './settings';
   import type { CaptionSettings } from './types';
 
+  import type { SubtitleEvent } from './types';
+
   let text = $state('');
   let visible = $state(false);
   let dimmed = $state(false);
   let settings = $state<CaptionSettings>(loadSettings());
   const hasCaptionText = $derived(text.trim().length > 0);
   const shouldShowWindow = $derived(visible && settings.enabled && hasCaptionText);
+
+  function handleSubtitleEvent(event: SubtitleEvent): void {
+    switch (event.type) {
+      case 'video_started':
+        dimmed = false;
+        text = '';
+        visible = false;
+        break;
+      case 'subtitle':
+        dimmed = false;
+        text = event.text ?? '';
+        visible = text.trim().length > 0;
+        break;
+      case 'paused':
+        if (settings.autoHideOnPause) {
+          visible = false;
+        } else if (settings.dimOnPause) {
+          dimmed = true;
+        }
+        break;
+      case 'resumed':
+        dimmed = false;
+        visible = text.trim().length > 0;
+        break;
+      case 'video_ended':
+        visible = false;
+        text = '';
+        break;
+      case 'settings_update':
+        settings = loadSettings();
+        break;
+      default:
+        break;
+    }
+  }
+
+  const unsubscribeEvents = onSubtitleEvent(handleSubtitleEvent);
 
   $effect(() => {
     if (shouldShowWindow) {
@@ -30,43 +69,8 @@
       }),
     );
 
-    const unsubscribe = onSubtitleEvent((event) => {
-      switch (event.type) {
-        case 'video_started':
-          dimmed = false;
-          text = '';
-          visible = false;
-          break;
-        case 'subtitle':
-          dimmed = false;
-          text = event.text ?? '';
-          visible = text.trim().length > 0;
-          break;
-        case 'paused':
-          if (settings.autoHideOnPause) {
-            visible = false;
-          } else if (settings.dimOnPause) {
-            dimmed = true;
-          }
-          break;
-        case 'resumed':
-          dimmed = false;
-          visible = text.trim().length > 0;
-          break;
-        case 'video_ended':
-          visible = false;
-          text = '';
-          break;
-        case 'settings_update':
-          settings = loadSettings();
-          break;
-        default:
-          break;
-      }
-    });
-
     return () => {
-      unsubscribe();
+      unsubscribeEvents();
       unsubscribeSettings?.();
     };
   });

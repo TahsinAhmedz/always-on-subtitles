@@ -13,6 +13,8 @@ type EventHandler = (event: SubtitleEvent) => void;
 const handlers = new Set<EventHandler>();
 let started = false;
 
+void ensureListening();
+
 export function onSubtitleEvent(handler: EventHandler): () => void {
   handlers.add(handler);
   void ensureListening();

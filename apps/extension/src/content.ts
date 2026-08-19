@@ -57,7 +57,23 @@ function ensureCaptionsEnabled(video: HTMLVideoElement): TextTrack | null {
   return getActiveTextTrack(video);
 }
 
-function getCurrentCueText(track: TextTrack): string {
+function getCaptionTextFromDom(): string {
+  const segments = document.querySelectorAll(
+    '.ytp-caption-segment, .captions-text span, .ytp-caption-window-container span',
+  );
+
+  if (segments.length === 0) {
+    return '';
+  }
+
+  return Array.from(segments)
+    .map((element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function getTrackCueText(track: TextTrack): string {
   const activeCues = track.activeCues;
   if (!activeCues || activeCues.length === 0) {
     return '';
@@ -71,6 +87,29 @@ function getCurrentCueText(track: TextTrack): string {
     }
   }
   return texts.join('\n').trim();
+}
+
+function getCurrentCaptionText(video: HTMLVideoElement): string {
+  const domText = getCaptionTextFromDom();
+  if (domText) {
+    return domText;
+  }
+
+  const track = getActiveTextTrack(video);
+  if (!track) {
+    return '';
+  }
+
+  return getTrackCueText(track);
+}
+
+function getCurrentCueTiming(video: HTMLVideoElement): { startTime?: number; endTime?: number } {
+  const track = getActiveTextTrack(video);
+  if (!track) {
+    return { startTime: video.currentTime };
+  }
+
+  return getCueTiming(track);
 }
 
 function getCueTiming(track: TextTrack): { startTime?: number; endTime?: number } {
@@ -171,15 +210,12 @@ async function poll(): Promise<void> {
     return;
   }
 
-  const track = ensureCaptionsEnabled(video);
-  if (!track) {
-    return;
-  }
+  ensureCaptionsEnabled(video);
 
-  const text = getCurrentCueText(track);
+  const text = getCurrentCaptionText(video);
   if (text && text !== lastCueText) {
     lastCueText = text;
-    const timing = getCueTiming(track);
+    const timing = getCurrentCueTiming(video);
     await emit({
       type: 'subtitle',
       videoId,
