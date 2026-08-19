@@ -1,4 +1,4 @@
-import { updateSettings } from '../storage';
+import { loadSettings, updateSettings } from '../storage';
 import { isExtensionContextValid, sendTabMessage } from '../runtime-safe';
 
 const enabledInput = document.getElementById('enabled') as HTMLInputElement;
@@ -39,7 +39,6 @@ async function checkConnection(serverPort: number): Promise<boolean> {
 }
 
 async function refreshUi(): Promise<void> {
-  const { loadSettings } = await import('../storage');
   const settings = await loadSettings();
   enabledInput.checked = settings.enabled;
 

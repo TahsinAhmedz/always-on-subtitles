@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import CaptionWindow from './lib/CaptionWindow.svelte';
   import SettingsWindow from './lib/SettingsWindow.svelte';
+  import { getCurrentWindowLabel } from './lib/tauri-api';
 
   let windowLabel = $state('caption');
   const isCaptionWindow = $derived(windowLabel === 'caption');
@@ -16,8 +17,12 @@
       }
       return;
     }
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    windowLabel = getCurrentWindow().label;
+
+    try {
+      windowLabel = await getCurrentWindowLabel();
+    } catch {
+      windowLabel = 'caption';
+    }
     if (windowLabel === 'caption') {
       document.documentElement.classList.add('caption-window');
     }

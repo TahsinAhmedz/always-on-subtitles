@@ -64,6 +64,10 @@ pub fn emit_subtitle_event(app: &AppHandle, event: SubtitleEvent) {
     let _ = app.emit("subtitle-event", &event);
 }
 
+pub fn emit_server_error(app: &AppHandle, message: String) {
+    let _ = app.emit("server-error", message);
+}
+
 pub fn show_caption_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("caption") {
         let _ = window.show();

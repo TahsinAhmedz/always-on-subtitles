@@ -1,10 +1,8 @@
 import { connect, refreshConnectionSettings, sendEvent } from './background-ws';
-import { startCaptionPoller } from './caption-poller';
 import { loadSettingsSafe } from './runtime-safe';
 import type { SubtitleEvent } from './types';
 
 void loadSettingsSafe().then(() => connect());
-startCaptionPoller();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'get_settings') {

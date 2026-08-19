@@ -3,7 +3,7 @@
   "name": "Always On Subtitles",
   "version": "0.1.0",
   "description": "Send YouTube captions to the Always On Subtitles desktop app.",
-  "permissions": ["storage", "activeTab", "alarms", "tabs"],
+  "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["https://www.youtube.com/*"],
   "web_accessible_resources": [
     {

@@ -1,6 +1,6 @@
 use crate::commands::{
-    emit_subtitle_event, hide_caption_window, show_caption_window, ServerState, SubtitleEvent,
-    WEBSOCKET_PORT,
+    emit_server_error, emit_subtitle_event, hide_caption_window, show_caption_window, ServerState,
+    SubtitleEvent, WEBSOCKET_PORT,
 };
 use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
@@ -16,7 +16,9 @@ pub async fn start_websocket_server(app: AppHandle, state: Arc<ServerState>) {
     let listener = match TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(error) => {
-            log::error!("Failed to bind WebSocket server on {addr}: {error}");
+            let message = format!("Failed to bind WebSocket server on {addr}: {error}");
+            log::error!("{message}");
+            emit_server_error(&app, message);
             return;
         }
     };

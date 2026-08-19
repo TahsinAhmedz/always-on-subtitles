@@ -3,6 +3,7 @@
   import {
     getExtensionInstallInfo,
     getServerStatus,
+    onServerError,
     openBrowserExtensionsPage,
     revealExtensionFolder,
   } from './websocket';
@@ -17,9 +18,19 @@
   let extensionPath = $state('');
   let extensionReady = $state(false);
   let isFirstRun = $state(localStorage.getItem('aos-first-run-complete') !== 'true');
+  let serverError = $state('');
 
-  onMount(async () => {
-    await Promise.all([refreshStatus(), refreshExtensionInfo()]);
+  onMount(() => {
+    void Promise.all([refreshStatus(), refreshExtensionInfo()]);
+
+    const unsubscribe = onServerError((message) => {
+      serverError = message;
+      serverRunning = false;
+    });
+
+    return () => {
+      unsubscribe();
+    };
   });
 
   async function refreshStatus() {
@@ -27,6 +38,9 @@
       const status = await getServerStatus();
       serverRunning = status.running;
       serverPort = status.port;
+      if (serverRunning) {
+        serverError = '';
+      }
     } catch {
       serverRunning = false;
     }
@@ -101,6 +115,9 @@
             {serverRunning ? 'Desktop server running' : 'Desktop server not running'}
           </p>
           <p class="status-detail">WebSocket: 127.0.0.1:{serverPort}</p>
+          {#if serverError}
+            <p class="error-detail">{serverError}</p>
+          {/if}
         </div>
         <button type="button" class="secondary" onclick={refreshStatus}>Refresh</button>
       </div>
@@ -384,6 +401,12 @@
     margin: 4px 0 0;
     font-size: 0.85rem;
     color: #9aa0a6;
+  }
+
+  .error-detail {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: #f87171;
   }
 
   .steps {

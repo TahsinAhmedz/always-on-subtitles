@@ -5,6 +5,7 @@ import type { ExtensionSettings, SubtitleEvent } from './types';
 
 const YOUTUBE_WATCH_PATH = '/watch';
 const PAGE_HOOK_EVENT = 'aos-captions-intercepted';
+const POLL_INTERVAL_MS = 200;
 
 let currentVideoId: string | null = null;
 let lastCueText = '';
@@ -13,6 +14,7 @@ let hasStartedForCurrentVideo = false;
 let hasCuesLoaded = false;
 let boundVideo: HTMLVideoElement | null = null;
 let contextInvalidated = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function injectPageHook(): void {
   if (document.getElementById('aos-page-hook')) {
@@ -229,6 +231,20 @@ function observeNavigation(): void {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
+function startPolling(): void {
+  if (pollTimer) {
+    return;
+  }
+  pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+}
+
+function stopPolling(): void {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 injectPageHook();
 
 window.addEventListener(PAGE_HOOK_EVENT, (event) => {
@@ -259,7 +275,9 @@ if (document.body) {
 
 window.addEventListener('beforeunload', () => {
   contextInvalidated = true;
+  stopPolling();
   emit({ type: 'video_ended' });
 });
 
+startPolling();
 poll();

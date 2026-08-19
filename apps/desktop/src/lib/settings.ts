@@ -1,5 +1,6 @@
-import type { CaptionSettings } from './types';
-import { DEFAULT_SETTINGS } from './types';
+import type { CaptionSettings } from '@always-on-subtitles/shared';
+import { DEFAULT_SETTINGS } from '@always-on-subtitles/shared';
+import { emitSettingsUpdate } from './tauri-api';
 
 const STORAGE_KEY = 'always-on-subtitles-settings';
 
@@ -17,16 +18,7 @@ export function loadSettings(): CaptionSettings {
 
 export function saveSettings(settings: CaptionSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  void notifySettingsChanged();
-}
-
-async function notifySettingsChanged(): Promise<void> {
-  try {
-    const { emit } = await import('@tauri-apps/api/event');
-    await emit('settings-update', {});
-  } catch {
-    // Running in browser-only dev mode without Tauri
-  }
+  void emitSettingsUpdate();
 }
 
 export function updateSettings(partial: Partial<CaptionSettings>): CaptionSettings {

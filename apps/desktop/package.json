@@ -12,9 +12,9 @@
     "tauri:build": "bash scripts/tauri.sh build"
   },
   "dependencies": {
+    "@always-on-subtitles/shared": "*",
     "@tauri-apps/api": "^2.2.0",
-    "@tauri-apps/plugin-shell": "^2.2.0",
-    "@tauri-apps/plugin-store": "^2.2.0"
+    "@tauri-apps/plugin-shell": "^2.2.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

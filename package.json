@@ -5,7 +5,8 @@
   "description": "Floating always-on-top YouTube subtitles companion",
   "workspaces": [
     "apps/desktop",
-    "apps/extension"
+    "apps/extension",
+    "packages/shared"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=apps/desktop",

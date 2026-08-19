@@ -8,10 +8,18 @@ export interface ExtensionInstallInfo {
   buildCommand: string;
 }
 
+export interface ServerStatus {
+  running: boolean;
+  port: number;
+}
+
 type EventHandler = (event: SubtitleEvent) => void;
+type ServerErrorHandler = (message: string) => void;
 
 const handlers = new Set<EventHandler>();
+const errorHandlers = new Set<ServerErrorHandler>();
 let started = false;
+let errorListeningStarted = false;
 
 void ensureListening();
 
@@ -19,6 +27,12 @@ export function onSubtitleEvent(handler: EventHandler): () => void {
   handlers.add(handler);
   void ensureListening();
   return () => handlers.delete(handler);
+}
+
+export function onServerError(handler: ServerErrorHandler): () => void {
+  errorHandlers.add(handler);
+  void ensureErrorListening();
+  return () => errorHandlers.delete(handler);
 }
 
 async function ensureListening(): Promise<void> {
@@ -33,7 +47,19 @@ async function ensureListening(): Promise<void> {
   });
 }
 
-export async function getServerStatus(): Promise<{ running: boolean; port: number }> {
+async function ensureErrorListening(): Promise<void> {
+  if (errorListeningStarted) {
+    return;
+  }
+  errorListeningStarted = true;
+  await listen<string>('server-error', (payload) => {
+    for (const handler of errorHandlers) {
+      handler(payload.payload);
+    }
+  });
+}
+
+export async function getServerStatus(): Promise<ServerStatus> {
   return invoke('get_server_status');
 }
 

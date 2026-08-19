@@ -4,6 +4,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onSubtitleEvent, hideCaptionWindow, showCaptionWindow } from './websocket';
   import { loadSettings } from './settings';
+  import { listenSettingsUpdate } from './tauri-api';
   import type { CaptionSettings, SubtitleCue, SubtitleEvent } from './types';
 
   let text = $state('');
@@ -121,8 +122,13 @@
       case 'settings_update':
         settings = loadSettings();
         break;
-      default:
+      case 'ping':
+      case 'pong':
         break;
+      default: {
+        const exhaustiveCheck: never = event.type;
+        throw new Error(`Unhandled subtitle event type: ${exhaustiveCheck}`);
+      }
     }
   }
 
@@ -180,13 +186,11 @@
     };
     animationFrame = requestAnimationFrame(tick);
 
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen('settings-update', () => {
-        settings = loadSettings();
-      }).then((unsub) => {
-        unsubscribeSettings = unsub;
-      }),
-    );
+    void listenSettingsUpdate(() => {
+      settings = loadSettings();
+    }).then((unsub) => {
+      unsubscribeSettings = unsub;
+    });
 
     return () => {
       unsubscribeEvents();
@@ -211,6 +215,9 @@
       class="caption-card"
       use:fitCaptionWindow
       data-tauri-drag-region
+      role="button"
+      aria-label="Drag to move caption window"
+      tabindex="-1"
       onpointerdown={startDrag}
     >
       <p class="caption-text">{text}</p>
