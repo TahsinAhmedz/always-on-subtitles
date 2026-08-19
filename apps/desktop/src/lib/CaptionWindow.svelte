@@ -9,6 +9,16 @@
   let dimmed = $state(false);
   let settings = $state<CaptionSettings>(loadSettings());
   onMount(() => {
+    let unsubscribeSettings: (() => void) | undefined;
+
+    void import('@tauri-apps/api/event').then(({ listen }) =>
+      listen('settings-update', () => {
+        settings = loadSettings();
+      }).then((unsub) => {
+        unsubscribeSettings = unsub;
+      }),
+    );
+
     const unsubscribe = onSubtitleEvent((event) => {
       switch (event.type) {
         case 'video_started':
@@ -44,7 +54,10 @@
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      unsubscribeSettings?.();
+    };
   });
 
 </script>

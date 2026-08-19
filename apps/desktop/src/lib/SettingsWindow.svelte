@@ -1,20 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { open } from '@tauri-apps/plugin-shell';
-  import { getServerStatus } from './websocket';
-  import { loadSettings, saveSettings, updateSettings } from './settings';
+  import {
+    getExtensionInstallInfo,
+    getServerStatus,
+    openBrowserExtensionsPage,
+    revealExtensionFolder,
+  } from './websocket';
+  import { loadSettings, updateSettings } from './settings';
   import type { CaptionSettings } from './types';
-
-  const EXTENSION_URL =
-    'https://github.com/always-on-subtitles/always-on-subtitles#browser-extension';
 
   let settings = $state<CaptionSettings>(loadSettings());
   let serverRunning = $state(false);
   let serverPort = $state(8756);
   let savedMessage = $state('');
+  let setupMessage = $state('');
+  let extensionPath = $state('');
+  let extensionReady = $state(false);
+  let isFirstRun = $state(localStorage.getItem('aos-first-run-complete') !== 'true');
 
   onMount(async () => {
-    await refreshStatus();
+    await Promise.all([refreshStatus(), refreshExtensionInfo()]);
   });
 
   async function refreshStatus() {
@@ -24,6 +29,16 @@
       serverPort = status.port;
     } catch {
       serverRunning = false;
+    }
+  }
+
+  async function refreshExtensionInfo() {
+    try {
+      const info = await getExtensionInstallInfo();
+      extensionPath = info.path;
+      extensionReady = info.exists;
+    } catch {
+      extensionReady = false;
     }
   }
 
@@ -38,120 +53,187 @@
     }, 1500);
   }
 
-  async function openExtensionInstall() {
-    await open(EXTENSION_URL);
+  async function openExtensionFolder() {
+    setupMessage = '';
+    try {
+      extensionPath = await revealExtensionFolder();
+      extensionReady = true;
+      localStorage.setItem('aos-first-run-complete', 'true');
+      isFirstRun = false;
+      setupMessage = 'Extension folder opened in Finder. Continue with step 2 below.';
+    } catch (error) {
+      setupMessage =
+        error instanceof Error
+          ? error.message
+          : 'Extension not built yet. Run `npm run build:extension` from the project root.';
+    }
+  }
+
+  async function openExtensionsPage() {
+    setupMessage = '';
+    try {
+      await openBrowserExtensionsPage();
+      localStorage.setItem('aos-first-run-complete', 'true');
+      isFirstRun = false;
+      setupMessage = 'Enable Developer mode, then click Load unpacked and choose the extension folder.';
+    } catch (error) {
+      setupMessage =
+        error instanceof Error
+          ? error.message
+          : 'Could not open the browser extensions page. Open chrome://extensions manually.';
+    }
   }
 </script>
 
-<main class="settings">
-  <header>
-    <h1>Always On Subtitles</h1>
-    <p class="subtitle">Floating captions for YouTube, visible anywhere on your screen.</p>
-  </header>
+<div class="settings-shell">
+  <main class="settings">
+    <header>
+      <h1>Always On Subtitles</h1>
+      <p class="subtitle">Floating captions for YouTube, visible anywhere on your screen.</p>
+    </header>
 
-  <section class="card status-card">
-    <h2>Connection</h2>
-    <div class="status-row">
-      <span class:online={serverRunning} class:offline={!serverRunning}></span>
-      <div>
-        <p class="status-label">
-          {serverRunning ? 'Desktop server running' : 'Desktop server not running'}
-        </p>
-        <p class="status-detail">WebSocket: 127.0.0.1:{serverPort}</p>
+    <section class="card status-card">
+      <h2>Connection</h2>
+      <div class="status-row">
+        <span class:online={serverRunning} class:offline={!serverRunning}></span>
+        <div>
+          <p class="status-label">
+            {serverRunning ? 'Desktop server running' : 'Desktop server not running'}
+          </p>
+          <p class="status-detail">WebSocket: 127.0.0.1:{serverPort}</p>
+        </div>
+        <button type="button" class="secondary" onclick={refreshStatus}>Refresh</button>
       </div>
-      <button type="button" class="secondary" onclick={refreshStatus}>Refresh</button>
-    </div>
-  </section>
+    </section>
 
-  <section class="card">
-    <h2>Setup</h2>
-    <p>Install the browser extension to send YouTube captions to this app.</p>
-    <button type="button" class="primary" onclick={openExtensionInstall}>
-      Install browser extension
-    </button>
-    <ol class="steps">
-      <li>Install this desktop app (you're here).</li>
-      <li>Install the browser extension.</li>
-      <li>Open any YouTube video — captions appear automatically.</li>
-    </ol>
-  </section>
+    <section class="card setup-card" class:highlight={isFirstRun}>
+      <h2>{isFirstRun ? 'Welcome — get started' : 'Install browser extension'}</h2>
+      <p>
+        The extension is loaded locally during development — there is no Chrome Web Store page yet.
+      </p>
 
-  <section class="card">
-    <h2>Caption appearance</h2>
+      {#if !extensionReady}
+        <p class="warning">
+          Extension not built yet. From the project root, run:
+          <code>npm run build:extension</code>
+        </p>
+      {:else}
+        <p class="path">
+          Extension folder:
+          <code>{extensionPath}</code>
+        </p>
+      {/if}
 
-    <label>
-      <span>Font size ({settings.fontSize}px)</span>
-      <input
-        type="range"
-        min="16"
-        max="48"
-        step="1"
-        value={settings.fontSize}
-        oninput={(e) => onSettingChange('fontSize', Number(e.currentTarget.value))}
-      />
-    </label>
+      <div class="button-row">
+        <button type="button" class="primary" onclick={openExtensionFolder}>
+          1. Open extension folder
+        </button>
+        <button type="button" class="secondary" onclick={openExtensionsPage}>
+          2. Open Chrome extensions
+        </button>
+      </div>
 
-    <label>
-      <span>Text color</span>
-      <input
-        type="color"
-        value={settings.fontColor}
-        oninput={(e) => onSettingChange('fontColor', e.currentTarget.value)}
-      />
-    </label>
+      <ol class="steps">
+        <li>Install this desktop app (you're here).</li>
+        <li>Build the extension if needed: <code>npm run build:extension</code>.</li>
+        <li>Open the extension folder, then open Chrome extensions.</li>
+        <li>Enable <strong>Developer mode</strong>, click <strong>Load unpacked</strong>, and select the folder.</li>
+        <li>Open any YouTube video — captions appear automatically.</li>
+      </ol>
 
-    <label>
-      <span>Background opacity ({Math.round(settings.backgroundOpacity * 100)}%)</span>
-      <input
-        type="range"
-        min="0.2"
-        max="1"
-        step="0.05"
-        value={settings.backgroundOpacity}
-        oninput={(e) =>
-          onSettingChange('backgroundOpacity', Number(e.currentTarget.value))}
-      />
-    </label>
+      {#if setupMessage}
+        <p class="setup-message">{setupMessage}</p>
+      {/if}
+    </section>
 
-    <label class="checkbox">
-      <input
-        type="checkbox"
-        checked={settings.dimOnPause}
-        onchange={(e) => onSettingChange('dimOnPause', e.currentTarget.checked)}
-      />
-      <span>Dim captions when video is paused</span>
-    </label>
+    <section class="card">
+      <h2>Caption appearance</h2>
 
-    <label class="checkbox">
-      <input
-        type="checkbox"
-        checked={settings.autoHideOnPause}
-        onchange={(e) => onSettingChange('autoHideOnPause', e.currentTarget.checked)}
-      />
-      <span>Hide captions when video is paused</span>
-    </label>
+      <label>
+        <span>Font size ({settings.fontSize}px)</span>
+        <input
+          type="range"
+          min="16"
+          max="48"
+          step="1"
+          value={settings.fontSize}
+          oninput={(e) => onSettingChange('fontSize', Number(e.currentTarget.value))}
+        />
+      </label>
 
-    <label class="checkbox">
-      <input
-        type="checkbox"
-        checked={settings.enabled}
-        onchange={(e) => onSettingChange('enabled', e.currentTarget.checked)}
-      />
-      <span>Enable floating captions</span>
-    </label>
+      <label>
+        <span>Text color</span>
+        <input
+          type="color"
+          value={settings.fontColor}
+          oninput={(e) => onSettingChange('fontColor', e.currentTarget.value)}
+        />
+      </label>
 
-    {#if savedMessage}
-      <p class="saved">{savedMessage}</p>
-    {/if}
-  </section>
-</main>
+      <label>
+        <span>Background opacity ({Math.round(settings.backgroundOpacity * 100)}%)</span>
+        <input
+          type="range"
+          min="0.2"
+          max="1"
+          step="0.05"
+          value={settings.backgroundOpacity}
+          oninput={(e) =>
+            onSettingChange('backgroundOpacity', Number(e.currentTarget.value))}
+        />
+      </label>
+
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          checked={settings.dimOnPause}
+          onchange={(e) => onSettingChange('dimOnPause', e.currentTarget.checked)}
+        />
+        <span>Dim captions when video is paused</span>
+      </label>
+
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          checked={settings.autoHideOnPause}
+          onchange={(e) => onSettingChange('autoHideOnPause', e.currentTarget.checked)}
+        />
+        <span>Hide captions when video is paused</span>
+      </label>
+
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          checked={settings.enabled}
+          onchange={(e) => onSettingChange('enabled', e.currentTarget.checked)}
+        />
+        <span>Enable floating captions</span>
+      </label>
+
+      {#if savedMessage}
+        <p class="saved">{savedMessage}</p>
+      {/if}
+    </section>
+  </main>
+</div>
 
 <style>
-  :global(body) {
-    margin: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  .settings-shell {
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
     background: #0f1115;
     color: #e8eaed;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  :global(html),
+  :global(body),
+  :global(#app) {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #0f1115;
   }
 
   .settings {
@@ -183,10 +265,35 @@
     font-size: 1.1rem;
   }
 
+  .setup-card.highlight {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f644;
+  }
+
   .card p {
     margin: 0 0 12px;
     color: #b8bcc4;
     line-height: 1.5;
+  }
+
+  .warning {
+    color: #fbbf24;
+  }
+
+  .path code,
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85rem;
+    word-break: break-all;
+  }
+
+  .path code {
+    display: block;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #0f1115;
+    color: #dbeafe;
   }
 
   label {
@@ -213,6 +320,13 @@
 
   .checkbox span {
     margin: 0;
+  }
+
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
   }
 
   button {
@@ -275,9 +389,17 @@
     line-height: 1.6;
   }
 
+  .setup-message,
   .saved {
-    margin: 8px 0 0;
-    color: #22c55e;
+    margin: 12px 0 0;
     font-size: 0.9rem;
+  }
+
+  .setup-message {
+    color: #93c5fd;
+  }
+
+  .saved {
+    color: #22c55e;
   }
 </style>

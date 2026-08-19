@@ -17,6 +17,16 @@ export function loadSettings(): CaptionSettings {
 
 export function saveSettings(settings: CaptionSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  void notifySettingsChanged();
+}
+
+async function notifySettingsChanged(): Promise<void> {
+  try {
+    const { emit } = await import('@tauri-apps/api/event');
+    await emit('settings-update', {});
+  } catch {
+    // Running in browser-only dev mode without Tauri
+  }
 }
 
 export function updateSettings(partial: Partial<CaptionSettings>): CaptionSettings {

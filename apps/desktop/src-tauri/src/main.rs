@@ -2,14 +2,14 @@ mod commands;
 mod websocket;
 
 use commands::{
-    get_server_status, hide_caption_window_cmd, show_caption_window_cmd, show_settings_window_cmd,
-    ServerState,
+    get_extension_install_info, get_server_status, hide_caption_window_cmd,
+    open_browser_extensions_page, reveal_extension_folder, show_caption_window_cmd,
+    show_settings_window_cmd, ServerState,
 };
 use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, RunEvent,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +21,9 @@ pub fn run() {
         .manage(server_state.clone())
         .invoke_handler(tauri::generate_handler![
             get_server_status,
+            get_extension_install_info,
+            reveal_extension_folder,
+            open_browser_extensions_page,
             show_caption_window_cmd,
             hide_caption_window_cmd,
             show_settings_window_cmd,
@@ -65,19 +68,10 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if let RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
-                if let Some(settings) = app_handle.get_webview_window("settings") {
-                    let _ = settings.hide();
-                }
-                if let Some(caption) = app_handle.get_webview_window("caption") {
-                    let _ = caption.hide();
-                }
-            }
-        });
+        .run(|_app_handle, _event| {});
 }
 
 fn main() {
+    env_logger::init();
     run();
 }
