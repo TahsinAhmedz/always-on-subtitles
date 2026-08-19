@@ -270,6 +270,10 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
     white-space: pre-wrap;
     word-break: break-word;
-    cursor: default;
+    cursor: grab;
+  }
+
+  .caption-card:active .caption-text {
+    cursor: grabbing;
   }
 </style>
