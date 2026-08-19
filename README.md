@@ -4,14 +4,16 @@ Floating, always-on-top YouTube captions that stay visible even when you're not 
 
 ## How it works
 
-1. **Desktop app** (Tauri) — draws a transparent, always-on-top caption window and runs a local WebSocket server on `127.0.0.1:8756`.
-2. **Browser extension** — reads YouTube caption cues and sends them to the desktop app.
+1. **Browser extension** — intercepts YouTube's timedtext API to capture the full cue list, then sends video sync events (current time, playing state, playback rate) to the desktop app.
+2. **Desktop app** (Tauri) — runs a local WebSocket server on `127.0.0.1:8756`, stores the cue list, and advances subtitles locally so they keep updating even when you leave the YouTube tab.
+
+This approach is inspired by [dkitle](https://github.com/ywxt/dkitle), which uses the same fetch/XHR interception and desktop-side cue playback pattern to keep subtitles in sync regardless of tab focus.
 
 ```mermaid
 flowchart LR
-    youtube[YouTube] --> extension[Browser extension]
-    extension -->|WebSocket| desktop[Tauri desktop app]
-    desktop --> overlay[Floating caption window]
+    youtube[YouTube timedtext API] -->|fetch/XHR hook| extension[Browser extension]
+    extension -->|cues + sync events via WebSocket| desktop[Tauri desktop app]
+    desktop -->|local cue playback| overlay[Floating caption window]
 ```
 
 ## Requirements
