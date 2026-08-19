@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, window::Color,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -63,6 +64,10 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            if let Some(caption) = app.get_webview_window("caption") {
+                let _ = caption.set_background_color(Some(Color(0, 0, 0, 0)));
+            }
 
             Ok(())
         })

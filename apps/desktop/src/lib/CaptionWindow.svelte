@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { onSubtitleEvent } from './websocket';
+  import { onSubtitleEvent, hideCaptionWindow, showCaptionWindow } from './websocket';
   import { loadSettings } from './settings';
   import type { CaptionSettings } from './types';
 
@@ -8,6 +8,17 @@
   let visible = $state(false);
   let dimmed = $state(false);
   let settings = $state<CaptionSettings>(loadSettings());
+  const hasCaptionText = $derived(text.trim().length > 0);
+  const shouldShowWindow = $derived(visible && settings.enabled && hasCaptionText);
+
+  $effect(() => {
+    if (shouldShowWindow) {
+      void showCaptionWindow();
+    } else {
+      void hideCaptionWindow();
+    }
+  });
+
   onMount(() => {
     let unsubscribeSettings: (() => void) | undefined;
 
@@ -22,14 +33,14 @@
     const unsubscribe = onSubtitleEvent((event) => {
       switch (event.type) {
         case 'video_started':
-          visible = true;
           dimmed = false;
           text = '';
+          visible = false;
           break;
         case 'subtitle':
-          visible = true;
           dimmed = false;
           text = event.text ?? '';
+          visible = text.trim().length > 0;
           break;
         case 'paused':
           if (settings.autoHideOnPause) {
@@ -40,7 +51,7 @@
           break;
         case 'resumed':
           dimmed = false;
-          visible = true;
+          visible = text.trim().length > 0;
           break;
         case 'video_ended':
           visible = false;
@@ -62,7 +73,7 @@
 
 </script>
 
-{#if visible && settings.enabled}
+{#if visible && settings.enabled && hasCaptionText}
   <div
     class="caption-root"
     class:dimmed
@@ -74,28 +85,34 @@
     aria-live="polite"
     aria-label="Floating subtitles"
   >
-  <p class="caption-text">{text || ' '}</p>
+    <p class="caption-text">{text}</p>
   </div>
 {/if}
 
 <style>
-  :global(body) {
+  :global(html),
+  :global(body),
+  :global(#app) {
     margin: 0;
-    background: transparent;
+    width: 100%;
+    height: 100%;
+    background: transparent !important;
     overflow: hidden;
     user-select: none;
   }
 
   .caption-root {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    padding: 24px;
+    padding: 12px 24px;
     box-sizing: border-box;
     cursor: grab;
     transition: opacity 0.2s ease;
+    background: transparent;
+    pointer-events: auto;
   }
 
   .caption-root.dimmed {

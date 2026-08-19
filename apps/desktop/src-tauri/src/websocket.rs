@@ -69,19 +69,22 @@ async fn handle_connection(
                 write.send(Message::Text(pong.into())).await?;
             }
             SubtitleEvent::VideoStarted { .. } => {
-                show_caption_window(&app);
                 emit_subtitle_event(&app, event);
             }
-            SubtitleEvent::Subtitle { .. } => {
-                show_caption_window(&app);
-                emit_subtitle_event(&app, event);
+            SubtitleEvent::Subtitle { text, .. } => {
+                emit_subtitle_event(&app, event.clone());
+                if text.as_ref().is_some_and(|value| !value.trim().is_empty()) {
+                    show_caption_window(&app);
+                } else {
+                    hide_caption_window(&app);
+                }
             }
             SubtitleEvent::Paused | SubtitleEvent::Resumed => {
                 emit_subtitle_event(&app, event);
             }
             SubtitleEvent::VideoEnded => {
-                emit_subtitle_event(&app, event.clone());
                 hide_caption_window(&app);
+                emit_subtitle_event(&app, event);
             }
             SubtitleEvent::SettingsUpdate => {
                 emit_subtitle_event(&app, event);
