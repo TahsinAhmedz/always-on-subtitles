@@ -7,4 +7,5 @@ target/
 .env.*
 apps/desktop/src-tauri/gen/
 apps/extension/dist/
-apps/extension/*.zip
+apps/extension/release/
+apps/desktop/apps/

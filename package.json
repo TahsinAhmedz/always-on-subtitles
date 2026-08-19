@@ -13,7 +13,7 @@
     "build": "npm run build --workspaces --if-present",
     "build:desktop": "npm run build --workspace=apps/desktop",
     "build:extension": "npm run build --workspace=apps/extension",
-    "package:desktop": "npm run tauri build --workspace=apps/desktop",
+    "package:desktop": "npm run tauri:build --workspace=apps/desktop",
     "package:extension": "npm run package --workspace=apps/extension"
   },
   "engines": {
