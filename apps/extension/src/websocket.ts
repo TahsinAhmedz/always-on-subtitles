@@ -88,7 +88,9 @@ function scheduleReconnect(): void {
   }
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    void connect();
+    void connect().catch(() => {
+      connectionState = 'disconnected';
+    });
   }, 3000);
 }
 

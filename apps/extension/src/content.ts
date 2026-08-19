@@ -1,5 +1,7 @@
 import { sendEvent } from './websocket';
-import { refreshSettingsFromBackground } from './content-settings';
+import { setSettings } from './content-settings';
+import { isExtensionContextValid, onRuntimeMessage } from './runtime-safe';
+import type { ExtensionSettings } from './types';
 import type { SubtitleEvent } from './types';
 
 const POLL_INTERVAL_MS = 100;
@@ -10,6 +12,7 @@ let lastCueText = '';
 let wasPlaying = false;
 let hasStartedForCurrentVideo = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let contextInvalidated = false;
 
 function getVideoId(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -80,7 +83,20 @@ function getCueTiming(track: TextTrack): { startTime?: number; endTime?: number 
 }
 
 async function emit(event: SubtitleEvent): Promise<void> {
-  await sendEvent(event);
+  try {
+    await sendEvent(event);
+  } catch {
+    // Desktop app may be offline; ignore send failures.
+  }
+}
+
+function stopOnInvalidContext(): boolean {
+  if (contextInvalidated || !isExtensionContextValid()) {
+    contextInvalidated = true;
+    stop();
+    return true;
+  }
+  return false;
 }
 
 async function handleVideoChange(videoId: string): Promise<void> {
@@ -99,6 +115,10 @@ async function emitVideoStarted(videoId: string): Promise<void> {
 }
 
 async function poll(): Promise<void> {
+  if (stopOnInvalidContext()) {
+    return;
+  }
+
   if (!window.location.pathname.startsWith(YOUTUBE_WATCH_PATH)) {
     if (currentVideoId) {
       currentVideoId = null;
@@ -177,7 +197,9 @@ function start(): void {
     return;
   }
   pollTimer = window.setInterval(() => {
-    void poll();
+    void poll().catch(() => {
+      stop();
+    });
   }, POLL_INTERVAL_MS);
 }
 
@@ -202,17 +224,16 @@ function observeNavigation(): void {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'settings_changed') {
+onRuntimeMessage((message) => {
+  const payload = message as { type?: string; settings?: ExtensionSettings };
+  if (payload?.type === 'settings_changed' && payload.settings) {
+    setSettings(payload.settings);
     lastCueText = '';
-    void refreshSettingsFromBackground();
   }
 });
 
-void refreshSettingsFromBackground().then(() => {
-  start();
-  observeNavigation();
-});
+start();
+observeNavigation();
 
 window.addEventListener('beforeunload', () => {
   stop();

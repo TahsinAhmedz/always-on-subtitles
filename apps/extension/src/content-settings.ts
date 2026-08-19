@@ -7,17 +7,9 @@ export function getSettings(): ExtensionSettings {
 }
 
 export function setSettings(next: ExtensionSettings): void {
-  settings = next;
+  settings = { ...DEFAULT_EXTENSION_SETTINGS, ...next };
 }
 
-export async function refreshSettingsFromBackground(): Promise<ExtensionSettings> {
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'get_settings' });
-    if (response && typeof response === 'object') {
-      settings = { ...DEFAULT_EXTENSION_SETTINGS, ...response };
-    }
-  } catch {
-    settings = { ...DEFAULT_EXTENSION_SETTINGS };
-  }
-  return settings;
+export function applySettingsPatch(partial: Partial<ExtensionSettings>): void {
+  settings = { ...settings, ...partial };
 }

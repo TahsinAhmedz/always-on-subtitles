@@ -1,19 +1,17 @@
-import { loadSettings } from './storage';
+import { loadSettingsSafe } from './runtime-safe';
 
-chrome.runtime.onInstalled.addListener(() => {
-  void loadSettings();
-});
+void loadSettingsSafe();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'get_settings') {
-    void loadSettings().then((settings) => {
+    void loadSettingsSafe().then((settings) => {
       sendResponse(settings);
     });
     return true;
   }
 
   if (message?.type === 'get_status') {
-    void loadSettings().then((settings) => {
+    void loadSettingsSafe().then((settings) => {
       sendResponse({ enabled: settings.enabled, serverPort: settings.serverPort });
     });
     return true;

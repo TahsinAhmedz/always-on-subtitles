@@ -1,32 +1,36 @@
-import { loadSettings, updateSettings } from '../storage';
+import { updateSettings } from '../storage';
+import { isExtensionContextValid, sendTabMessage } from '../runtime-safe';
 
 const enabledInput = document.getElementById('enabled') as HTMLInputElement;
 const statusEl = document.getElementById('status') as HTMLParagraphElement;
 const helpText = document.getElementById('help-text') as HTMLParagraphElement;
 const reconnectButton = document.getElementById('reconnect') as HTMLButtonElement;
 
-async function checkConnection(): Promise<boolean> {
-  const settings = await loadSettings();
-  const url = `ws://127.0.0.1:${settings.serverPort}`;
+async function checkConnection(serverPort: number): Promise<boolean> {
+  const url = `ws://127.0.0.1:${serverPort}`;
 
   return new Promise<boolean>((resolve) => {
     try {
       const ws = new WebSocket(url);
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         ws.close();
         resolve(false);
       }, 2000);
 
       ws.onopen = () => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         ws.send(JSON.stringify({ type: 'ping' }));
         ws.close();
         resolve(true);
       };
 
       ws.onerror = () => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         resolve(false);
+      };
+
+      ws.onclose = () => {
+        window.clearTimeout(timeout);
       };
     } catch {
       resolve(false);
@@ -35,10 +39,11 @@ async function checkConnection(): Promise<boolean> {
 }
 
 async function refreshUi(): Promise<void> {
+  const { loadSettings } = await import('../storage');
   const settings = await loadSettings();
   enabledInput.checked = settings.enabled;
 
-  const connected = await checkConnection();
+  const connected = await checkConnection(settings.serverPort);
 
   statusEl.textContent = connected
     ? 'Connected to desktop app'
@@ -51,13 +56,19 @@ async function refreshUi(): Promise<void> {
 }
 
 enabledInput.addEventListener('change', async () => {
-  await updateSettings({ enabled: enabledInput.checked });
+  const settings = await updateSettings({ enabled: enabledInput.checked });
+
+  if (!isExtensionContextValid()) {
+    return;
+  }
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tabId = tabs[0]?.id;
     if (tabId) {
-      chrome.tabs.sendMessage(tabId, { type: 'settings_changed' });
+      sendTabMessage(tabId, { type: 'settings_changed', settings });
     }
   });
+
   await refreshUi();
 });
 
@@ -65,4 +76,7 @@ reconnectButton.addEventListener('click', async () => {
   await refreshUi();
 });
 
-void refreshUi();
+void refreshUi().catch(() => {
+  statusEl.textContent = 'Extension unavailable';
+  statusEl.className = 'status disconnected';
+});

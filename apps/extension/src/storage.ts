@@ -1,14 +1,12 @@
-import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings } from './types';
-
-const SETTINGS_KEY = 'settings';
+import { loadSettingsSafe, saveSettingsSafe } from './runtime-safe';
+import type { ExtensionSettings } from './types';
 
 export async function loadSettings(): Promise<ExtensionSettings> {
-  const result = await chrome.storage.sync.get(SETTINGS_KEY);
-  return { ...DEFAULT_EXTENSION_SETTINGS, ...(result[SETTINGS_KEY] as ExtensionSettings | undefined) };
+  return loadSettingsSafe();
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {
-  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+  await saveSettingsSafe(settings);
 }
 
 export async function updateSettings(
