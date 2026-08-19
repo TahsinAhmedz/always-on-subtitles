@@ -207,18 +207,12 @@
     aria-live="polite"
     aria-label="Floating subtitles"
   >
-    <div class="caption-card" use:fitCaptionWindow>
-      <button
-        type="button"
-        class="drag-handle"
-        data-tauri-drag-region
-        title="Drag to reposition"
-        aria-label="Drag to reposition subtitles"
-        onpointerdown={startDrag}
-      >
-        <span class="grip" aria-hidden="true"></span>
-        <span class="drag-label">Drag to move</span>
-      </button>
+    <div
+      class="caption-card"
+      use:fitCaptionWindow
+      data-tauri-drag-region
+      onpointerdown={startDrag}
+    >
       <p class="caption-text">{text}</p>
     </div>
   </div>
@@ -257,44 +251,11 @@
     overflow: hidden;
     background: rgba(0, 0, 0, var(--bg-opacity));
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  }
-
-  .drag-handle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    padding: 6px 12px;
-    box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
     cursor: grab;
-    border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    user-select: none;
-    font-family: inherit;
   }
 
-  .drag-handle:active {
+  .caption-card:active {
     cursor: grabbing;
-  }
-
-  .grip {
-    width: 16px;
-    height: 10px;
-    background-image: radial-gradient(circle, currentColor 1.5px, transparent 1.5px);
-    background-size: 8px 5px;
-    background-position: center;
-    opacity: 0.95;
-  }
-
-  .drag-label {
-    line-height: 1;
   }
 
   .caption-text {
