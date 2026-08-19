@@ -1,6 +1,10 @@
+import { connect, refreshConnectionSettings, sendEvent } from './background-ws';
+import { startCaptionPoller } from './caption-poller';
 import { loadSettingsSafe } from './runtime-safe';
+import type { SubtitleEvent } from './types';
 
-void loadSettingsSafe();
+void loadSettingsSafe().then(() => connect());
+startCaptionPoller();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'get_settings') {
@@ -17,5 +21,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'subtitle_event' && message.event) {
+    void sendEvent(message.event as SubtitleEvent);
+    return false;
+  }
+
   return false;
+});
+
+chrome.storage.onChanged.addListener(() => {
+  refreshConnectionSettings();
 });

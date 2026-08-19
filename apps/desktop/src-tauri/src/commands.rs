@@ -8,6 +8,14 @@ use tauri::{AppHandle, Emitter, Manager, State};
 pub const WEBSOCKET_PORT: u16 = 8756;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleCue {
+    pub start_ms: f64,
+    pub end_ms: f64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubtitleEvent {
     #[serde(rename_all = "camelCase")]
@@ -20,6 +28,18 @@ pub enum SubtitleEvent {
         text: Option<String>,
         start_time: Option<f64>,
         end_time: Option<f64>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Cues {
+        video_id: Option<String>,
+        cues: Vec<SubtitleCue>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Sync {
+        video_time_ms: f64,
+        playing: bool,
+        playback_rate: f64,
+        timestamp: u64,
     },
     Paused,
     Resumed,

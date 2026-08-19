@@ -41,6 +41,7 @@ if (watch) {
 
 cpSync(join(root, 'src', 'popup', 'popup.html'), join(dist, 'popup', 'popup.html'));
 cpSync(join(root, 'src', 'popup', 'popup.css'), join(dist, 'popup', 'popup.css'));
+copyFileSync(join(root, 'src', 'page-hook.js'), join(dist, 'page-hook.js'));
 
 const manifest = JSON.parse(readFileSync(join(root, 'src', 'manifest.json'), 'utf8'));
 writeFileSync(join(dist, 'manifest.json'), JSON.stringify(manifest, null, 2));

@@ -79,6 +79,15 @@ async fn handle_connection(
                     hide_caption_window(&app);
                 }
             }
+            SubtitleEvent::Cues { cues, .. } => {
+                emit_subtitle_event(&app, event.clone());
+                if cues.iter().any(|cue| !cue.text.trim().is_empty()) {
+                    show_caption_window(&app);
+                }
+            }
+            SubtitleEvent::Sync { .. } => {
+                emit_subtitle_event(&app, event);
+            }
             SubtitleEvent::Paused | SubtitleEvent::Resumed => {
                 emit_subtitle_event(&app, event);
             }

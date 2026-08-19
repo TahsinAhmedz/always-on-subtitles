@@ -1,17 +1,74 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { LogicalSize } from '@tauri-apps/api/dpi';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onSubtitleEvent, hideCaptionWindow, showCaptionWindow } from './websocket';
   import { loadSettings } from './settings';
-  import type { CaptionSettings } from './types';
-
-  import type { SubtitleEvent } from './types';
+  import type { CaptionSettings, SubtitleCue, SubtitleEvent } from './types';
 
   let text = $state('');
   let visible = $state(false);
   let dimmed = $state(false);
   let settings = $state<CaptionSettings>(loadSettings());
+  let cues = $state<SubtitleCue[]>([]);
+  let useCuePlayback = $state(false);
+  let syncState = $state({
+    videoTimeMs: 0,
+    playing: false,
+    playbackRate: 1,
+    syncedAt: 0,
+  });
+
   const hasCaptionText = $derived(text.trim().length > 0);
   const shouldShowWindow = $derived(visible && settings.enabled && hasCaptionText);
+
+  function estimatedTimeMs(): number {
+    if (!syncState.playing) {
+      return syncState.videoTimeMs;
+    }
+    const elapsed = performance.now() - syncState.syncedAt;
+    return syncState.videoTimeMs + elapsed * syncState.playbackRate;
+  }
+
+  function findCueText(timeMs: number): string {
+    if (cues.length === 0) {
+      return '';
+    }
+
+    let low = 0;
+    let high = cues.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (cues[mid].startMs <= timeMs) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+
+    if (low === 0) {
+      return '';
+    }
+
+    const cue = cues[low - 1];
+    if (timeMs < cue.endMs) {
+      return cue.text;
+    }
+    if (low < cues.length) {
+      return cue.text;
+    }
+    return '';
+  }
+
+  function updateTextFromCues(): void {
+    if (!useCuePlayback) {
+      return;
+    }
+
+    const nextText = findCueText(estimatedTimeMs());
+    text = nextText;
+    visible = nextText.trim().length > 0;
+  }
 
   function handleSubtitleEvent(event: SubtitleEvent): void {
     switch (event.type) {
@@ -19,11 +76,30 @@
         dimmed = false;
         text = '';
         visible = false;
+        cues = [];
+        useCuePlayback = false;
+        break;
+      case 'cues':
+        dimmed = false;
+        cues = [...(event.cues ?? [])].sort((a, b) => a.startMs - b.startMs);
+        useCuePlayback = cues.length > 0;
+        updateTextFromCues();
+        break;
+      case 'sync':
+        syncState = {
+          videoTimeMs: event.videoTimeMs ?? 0,
+          playing: event.playing ?? false,
+          playbackRate: event.playbackRate ?? 1,
+          syncedAt: performance.now(),
+        };
+        updateTextFromCues();
         break;
       case 'subtitle':
-        dimmed = false;
-        text = event.text ?? '';
-        visible = text.trim().length > 0;
+        if (!useCuePlayback) {
+          dimmed = false;
+          text = event.text ?? '';
+          visible = text.trim().length > 0;
+        }
         break;
       case 'paused':
         if (settings.autoHideOnPause) {
@@ -39,6 +115,8 @@
       case 'video_ended':
         visible = false;
         text = '';
+        cues = [];
+        useCuePlayback = false;
         break;
       case 'settings_update':
         settings = loadSettings();
@@ -50,6 +128,38 @@
 
   const unsubscribeEvents = onSubtitleEvent(handleSubtitleEvent);
 
+  function startDrag(event: PointerEvent): void {
+    if (event.button !== 0) {
+      return;
+    }
+    void getCurrentWindow().startDragging();
+  }
+
+  function fitCaptionWindow(card: HTMLElement) {
+    let frame = 0;
+
+    const apply = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = card.getBoundingClientRect();
+        const width = Math.max(Math.ceil(rect.width), 200);
+        const height = Math.max(Math.ceil(rect.height), 48);
+        void getCurrentWindow().setSize(new LogicalSize(width, height));
+      });
+    };
+
+    const observer = new ResizeObserver(() => apply());
+    observer.observe(card);
+    apply();
+
+    return {
+      destroy() {
+        observer.disconnect();
+        cancelAnimationFrame(frame);
+      },
+    };
+  }
+
   $effect(() => {
     if (shouldShowWindow) {
       void showCaptionWindow();
@@ -60,6 +170,15 @@
 
   onMount(() => {
     let unsubscribeSettings: (() => void) | undefined;
+    let animationFrame = 0;
+
+    const tick = () => {
+      if (useCuePlayback && syncState.playing) {
+        updateTextFromCues();
+      }
+      animationFrame = requestAnimationFrame(tick);
+    };
+    animationFrame = requestAnimationFrame(tick);
 
     void import('@tauri-apps/api/event').then(({ listen }) =>
       listen('settings-update', () => {
@@ -72,16 +191,15 @@
     return () => {
       unsubscribeEvents();
       unsubscribeSettings?.();
+      cancelAnimationFrame(animationFrame);
     };
   });
-
 </script>
 
 {#if visible && settings.enabled && hasCaptionText}
   <div
     class="caption-root"
     class:dimmed
-    data-tauri-drag-region
     style:--font-size="{settings.fontSize}px"
     style:--font-color={settings.fontColor}
     style:--bg-opacity={settings.backgroundOpacity}
@@ -89,46 +207,99 @@
     aria-live="polite"
     aria-label="Floating subtitles"
   >
-    <p class="caption-text">{text}</p>
+    <div class="caption-card" use:fitCaptionWindow>
+      <button
+        type="button"
+        class="drag-handle"
+        data-tauri-drag-region
+        title="Drag to reposition"
+        aria-label="Drag to reposition subtitles"
+        onpointerdown={startDrag}
+      >
+        <span class="grip" aria-hidden="true"></span>
+        <span class="drag-label">Drag to move</span>
+      </button>
+      <p class="caption-text">{text}</p>
+    </div>
   </div>
 {/if}
 
 <style>
-  :global(html),
-  :global(body),
-  :global(#app) {
+  :global(html.caption-window),
+  :global(html.caption-window body),
+  :global(html.caption-window #app) {
     margin: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent !important;
+    width: fit-content;
+    height: fit-content;
     overflow: hidden;
+    background: transparent !important;
     user-select: none;
   }
 
   .caption-root {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding: 12px 24px;
-    box-sizing: border-box;
-    cursor: grab;
+    display: block;
+    width: fit-content;
+    max-width: 960px;
+    min-width: 200px;
     transition: opacity 0.2s ease;
     background: transparent;
-    pointer-events: auto;
   }
 
   .caption-root.dimmed {
     opacity: 0.35;
   }
 
+  .caption-card {
+    width: max-content;
+    max-width: 960px;
+    min-width: 200px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, var(--bg-opacity));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  .drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    cursor: grab;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    user-select: none;
+    font-family: inherit;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .grip {
+    width: 16px;
+    height: 10px;
+    background-image: radial-gradient(circle, currentColor 1.5px, transparent 1.5px);
+    background-size: 8px 5px;
+    background-position: center;
+    opacity: 0.95;
+  }
+
+  .drag-label {
+    line-height: 1;
+  }
+
   .caption-text {
     margin: 0;
-    max-width: min(90vw, 960px);
-    padding: 12px 20px;
-    border-radius: 10px;
-    background: rgba(0, 0, 0, var(--bg-opacity));
+    padding: 10px 20px 12px;
     color: var(--font-color);
     font-size: var(--font-size);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -138,5 +309,6 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
     white-space: pre-wrap;
     word-break: break-word;
+    cursor: default;
   }
 </style>

@@ -1,18 +1,30 @@
-import { sendEvent } from './websocket';
 import { setSettings } from './content-settings';
 import { isExtensionContextValid, onRuntimeMessage } from './runtime-safe';
-import type { ExtensionSettings } from './types';
-import type { SubtitleEvent } from './types';
+import { parseYoutubeTimedText } from './youtube-cues';
+import type { ExtensionSettings, SubtitleEvent } from './types';
 
-const POLL_INTERVAL_MS = 100;
 const YOUTUBE_WATCH_PATH = '/watch';
+const PAGE_HOOK_EVENT = 'aos-captions-intercepted';
 
 let currentVideoId: string | null = null;
 let lastCueText = '';
 let wasPlaying = false;
 let hasStartedForCurrentVideo = false;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let hasCuesLoaded = false;
+let boundVideo: HTMLVideoElement | null = null;
 let contextInvalidated = false;
+
+function injectPageHook(): void {
+  if (document.getElementById('aos-page-hook')) {
+    return;
+  }
+
+  const script = document.createElement('script');
+  script.id = 'aos-page-hook';
+  script.src = chrome.runtime.getURL('page-hook.js');
+  script.onload = () => script.remove();
+  (document.documentElement || document.head).appendChild(script);
+}
 
 function getVideoId(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -30,141 +42,108 @@ function getVideoTitle(): string {
   return titleElement?.textContent?.trim() ?? document.title;
 }
 
-function getActiveTextTrack(video: HTMLVideoElement): TextTrack | null {
-  const tracks = Array.from(video.textTracks);
-  const showing = tracks.find((track) => track.mode === 'showing');
-  if (showing) {
-    return showing;
-  }
-  const hidden = tracks.find((track) => track.mode === 'hidden');
-  return hidden ?? null;
-}
-
-function ensureCaptionsEnabled(video: HTMLVideoElement): TextTrack | null {
-  const track = getActiveTextTrack(video);
-  if (track) {
-    return track;
+function emit(event: SubtitleEvent): void {
+  if (!isExtensionContextValid()) {
+    return;
   }
 
-  const captionsButton = document.querySelector(
-    '.ytp-subtitles-button[aria-pressed="false"]',
-  ) as HTMLButtonElement | null;
-
-  if (captionsButton) {
-    captionsButton.click();
-  }
-
-  return getActiveTextTrack(video);
-}
-
-function getCaptionTextFromDom(): string {
-  const segments = document.querySelectorAll(
-    '.ytp-caption-segment, .captions-text span, .ytp-caption-window-container span',
-  );
-
-  if (segments.length === 0) {
-    return '';
-  }
-
-  return Array.from(segments)
-    .map((element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '')
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-}
-
-function getTrackCueText(track: TextTrack): string {
-  const activeCues = track.activeCues;
-  if (!activeCues || activeCues.length === 0) {
-    return '';
-  }
-
-  const texts: string[] = [];
-  for (let index = 0; index < activeCues.length; index += 1) {
-    const cue = activeCues[index] as VTTCue;
-    if (cue.text) {
-      texts.push(cue.text.replace(/<[^>]+>/g, ''));
-    }
-  }
-  return texts.join('\n').trim();
-}
-
-function getCurrentCaptionText(video: HTMLVideoElement): string {
-  const domText = getCaptionTextFromDom();
-  if (domText) {
-    return domText;
-  }
-
-  const track = getActiveTextTrack(video);
-  if (!track) {
-    return '';
-  }
-
-  return getTrackCueText(track);
-}
-
-function getCurrentCueTiming(video: HTMLVideoElement): { startTime?: number; endTime?: number } {
-  const track = getActiveTextTrack(video);
-  if (!track) {
-    return { startTime: video.currentTime };
-  }
-
-  return getCueTiming(track);
-}
-
-function getCueTiming(track: TextTrack): { startTime?: number; endTime?: number } {
-  const activeCues = track.activeCues;
-  if (!activeCues || activeCues.length === 0) {
-    return {};
-  }
-  const cue = activeCues[0] as VTTCue;
-  return { startTime: cue.startTime, endTime: cue.endTime };
-}
-
-async function emit(event: SubtitleEvent): Promise<void> {
   try {
-    await sendEvent(event);
+    chrome.runtime.sendMessage({ type: 'subtitle_event', event }, () => {
+      void chrome.runtime.lastError;
+    });
   } catch {
-    // Desktop app may be offline; ignore send failures.
+    // Extension context may be invalidated after reload.
   }
 }
 
-function stopOnInvalidContext(): boolean {
-  if (contextInvalidated || !isExtensionContextValid()) {
-    contextInvalidated = true;
-    stop();
-    return true;
-  }
-  return false;
+function resetVideoState(): void {
+  currentVideoId = null;
+  lastCueText = '';
+  hasStartedForCurrentVideo = false;
+  wasPlaying = false;
+  hasCuesLoaded = false;
+  boundVideo = null;
 }
 
-async function handleVideoChange(videoId: string): Promise<void> {
+function handleVideoChange(videoId: string): void {
   currentVideoId = videoId;
   lastCueText = '';
   wasPlaying = false;
   hasStartedForCurrentVideo = false;
+  hasCuesLoaded = false;
+  boundVideo = null;
 }
 
-async function emitVideoStarted(videoId: string): Promise<void> {
-  await emit({
+function emitVideoStarted(videoId: string): void {
+  emit({
     type: 'video_started',
     videoId,
     title: getVideoTitle(),
   });
 }
 
-async function poll(): Promise<void> {
+function sendVideoSync(video: HTMLVideoElement): void {
+  emit({
+    type: 'sync',
+    videoId: currentVideoId ?? getVideoId() ?? undefined,
+    videoTimeMs: video.currentTime * 1000,
+    playing: !video.paused && !video.ended,
+    playbackRate: video.playbackRate,
+    timestamp: Date.now(),
+  });
+}
+
+function bindVideoSync(video: HTMLVideoElement): void {
+  if (video === boundVideo) {
+    return;
+  }
+
+  boundVideo = video;
+  const events = ['timeupdate', 'play', 'pause', 'seeked', 'ratechange'] as const;
+  for (const eventName of events) {
+    video.addEventListener(eventName, () => sendVideoSync(video));
+  }
+  sendVideoSync(video);
+}
+
+function tryBindVideo(): void {
+  const video = getVideoElement();
+  if (video) {
+    bindVideoSync(video);
+  }
+}
+
+function getCaptionTextFromDom(): string {
+  const segments = document.querySelectorAll('.ytp-caption-segment');
+  if (segments.length > 0) {
+    return Array.from(segments)
+      .map((element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  const captionsText = document.querySelector('.captions-text');
+  return captionsText?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function stopOnInvalidContext(): boolean {
+  if (contextInvalidated || !isExtensionContextValid()) {
+    contextInvalidated = true;
+    return true;
+  }
+  return false;
+}
+
+function poll(): void {
   if (stopOnInvalidContext()) {
     return;
   }
 
   if (!window.location.pathname.startsWith(YOUTUBE_WATCH_PATH)) {
     if (currentVideoId) {
-      currentVideoId = null;
-      lastCueText = '';
-      hasStartedForCurrentVideo = false;
-      wasPlaying = false;
-      await emit({ type: 'video_ended' });
+      resetVideoState();
+      emit({ type: 'video_ended' });
     }
     return;
   }
@@ -180,70 +159,63 @@ async function poll(): Promise<void> {
   }
 
   if (videoId !== currentVideoId) {
-    await handleVideoChange(videoId);
+    handleVideoChange(videoId);
   }
+
+  tryBindVideo();
 
   const isPlaying = !video.paused && !video.ended;
   if (isPlaying && !wasPlaying) {
     if (!hasStartedForCurrentVideo && currentVideoId) {
       hasStartedForCurrentVideo = true;
-      await emitVideoStarted(currentVideoId);
+      emitVideoStarted(currentVideoId);
     } else {
-      await emit({ type: 'resumed' });
+      emit({ type: 'resumed' });
     }
   } else if (!isPlaying && wasPlaying) {
-    await emit({ type: 'paused' });
+    emit({ type: 'paused' });
   }
   wasPlaying = isPlaying;
 
   if (video.ended) {
     if (currentVideoId) {
-      currentVideoId = null;
-      lastCueText = '';
-      hasStartedForCurrentVideo = false;
-      await emit({ type: 'video_ended' });
+      resetVideoState();
+      emit({ type: 'video_ended' });
     }
     return;
   }
 
-  if (!isPlaying) {
+  if (!isPlaying || hasCuesLoaded) {
     return;
   }
 
-  ensureCaptionsEnabled(video);
-
-  const text = getCurrentCaptionText(video);
+  const text = getCaptionTextFromDom();
   if (text && text !== lastCueText) {
     lastCueText = text;
-    const timing = getCurrentCueTiming(video);
-    await emit({
+    emit({
       type: 'subtitle',
       videoId,
       text,
-      startTime: timing.startTime,
-      endTime: timing.endTime,
+      startTime: video.currentTime,
     });
   } else if (!text && lastCueText) {
     lastCueText = '';
   }
 }
 
-function start(): void {
-  if (pollTimer) {
+function handleInterceptedCues(data: unknown): void {
+  const cues = parseYoutubeTimedText(data);
+  if (cues.length === 0) {
     return;
   }
-  pollTimer = window.setInterval(() => {
-    void poll().catch(() => {
-      stop();
-    });
-  }, POLL_INTERVAL_MS);
-}
 
-function stop(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
+  hasCuesLoaded = true;
+  lastCueText = '';
+  emit({
+    type: 'cues',
+    videoId: getVideoId() ?? undefined,
+    cues,
+  });
 }
 
 function observeNavigation(): void {
@@ -251,27 +223,43 @@ function observeNavigation(): void {
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      currentVideoId = null;
-      lastCueText = '';
-      hasStartedForCurrentVideo = false;
-      wasPlaying = false;
+      resetVideoState();
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-onRuntimeMessage((message) => {
-  const payload = message as { type?: string; settings?: ExtensionSettings };
-  if (payload?.type === 'settings_changed' && payload.settings) {
-    setSettings(payload.settings);
-    lastCueText = '';
+injectPageHook();
+
+window.addEventListener(PAGE_HOOK_EVENT, (event) => {
+  const detail = (event as CustomEvent<{ data?: unknown }>).detail;
+  if (detail?.data) {
+    handleInterceptedCues(detail.data);
   }
 });
 
-start();
-observeNavigation();
+onRuntimeMessage((message) => {
+  const payload = message as { type?: string; settings?: ExtensionSettings };
+  if (payload?.type === 'poll') {
+    poll();
+    return;
+  }
+  if (payload?.type === 'settings_changed' && payload.settings) {
+    setSettings(payload.settings);
+    lastCueText = '';
+    hasCuesLoaded = false;
+  }
+});
+
+if (document.body) {
+  observeNavigation();
+} else {
+  window.addEventListener('DOMContentLoaded', observeNavigation, { once: true });
+}
 
 window.addEventListener('beforeunload', () => {
-  stop();
-  void emit({ type: 'video_ended' });
+  contextInvalidated = true;
+  emit({ type: 'video_ended' });
 });
+
+poll();

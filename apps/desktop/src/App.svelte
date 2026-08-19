@@ -30,6 +30,9 @@
       html,
       body,
       #app {
+        width: fit-content;
+        height: fit-content;
+        overflow: hidden;
         background: transparent !important;
       }
     </style>

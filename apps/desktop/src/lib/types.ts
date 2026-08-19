@@ -1,12 +1,20 @@
 export type SubtitleEventType =
   | 'video_started'
   | 'subtitle'
+  | 'cues'
+  | 'sync'
   | 'paused'
   | 'resumed'
   | 'video_ended'
   | 'settings_update'
   | 'ping'
   | 'pong';
+
+export interface SubtitleCue {
+  startMs: number;
+  endMs: number;
+  text: string;
+}
 
 export interface SubtitleEvent {
   type: SubtitleEventType;
@@ -15,6 +23,11 @@ export interface SubtitleEvent {
   startTime?: number;
   endTime?: number;
   title?: string;
+  cues?: SubtitleCue[];
+  videoTimeMs?: number;
+  playing?: boolean;
+  playbackRate?: number;
+  timestamp?: number;
   enabled?: boolean;
 }
 
