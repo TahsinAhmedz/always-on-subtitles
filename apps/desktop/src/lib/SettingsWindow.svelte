@@ -219,9 +219,12 @@
 
 <style>
   .settings-shell {
-    min-height: 100vh;
+    position: fixed;
+    inset: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     background: #0f1115;
     color: #e8eaed;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -231,6 +234,7 @@
   :global(body),
   :global(#app) {
     margin: 0;
+    width: 100%;
     height: 100%;
     overflow: hidden;
     background: #0f1115;
